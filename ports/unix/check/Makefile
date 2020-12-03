@@ -64,8 +64,11 @@ clean:
 	@rm -f *.o $(LWIPLIBCOMMON) $(APPLIB) lwip_unittests *.s .depend* *.core core lwip_unittests.xml
 
 depend dep: .depend
+	@true
 
+ifneq ($(MAKECMDGOALS),clean)
 include .depend
+endif
 
 .depend: $(LWIPFILES) $(APPFILES) $(TESTFILES)
 	$(CCDEP) $(CFLAGS) -MM $^ > .depend || rm -f .depend
