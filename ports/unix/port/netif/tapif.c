@@ -40,7 +40,6 @@
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/uio.h>
-#include <sys/socket.h>
 
 #include "lwip/opt.h"
 
@@ -84,6 +83,17 @@
 #define DEVTAP "/dev/tun0"
 #define NETMASK_ARGS "netmask %d.%d.%d.%d"
 #define IFCONFIG_ARGS "tun0 inet %d.%d.%d.%d " NETMASK_ARGS " link0"
+#elif defined(LWIP_UNIX_FREEBSD)
+#include <sys/ioctl.h>
+#include <net/if.h>
+#include <net/if_tap.h>
+#define DEVTAP "/dev/tap0"
+#define NETMASK_ARGS "netmask %d.%d.%d.%d"
+#define IFCONFIG_ARGS "tap0 inet %d.%d.%d.%d " NETMASK_ARGS
+
+#ifndef DEVTAP_DEFAULT_IF
+#define DEVTAP_DEFAULT_IF "lwip"
+#endif
 #else /* others */
 #define DEVTAP "/dev/tap0"
 #define NETMASK_ARGS "netmask %d.%d.%d.%d"
@@ -119,7 +129,7 @@ low_level_init(struct netif *netif)
   char buf[1024];
 #endif /* LWIP_IPV4 */
   char *preconfigured_tapif = getenv("PRECONFIGURED_TAPIF");
-  
+
   tapif = (struct tapif *)netif->state;
 
   /* Obtain MAC address from network interface. */
@@ -156,7 +166,7 @@ low_level_init(struct netif *netif)
       strncpy(ifr.ifr_name, preconfigured_tapif, sizeof(ifr.ifr_name));
     } else {
       strncpy(ifr.ifr_name, DEVTAP_DEFAULT_IF, sizeof(ifr.ifr_name));
-    } 
+    }
     ifr.ifr_name[sizeof(ifr.ifr_name)-1] = 0; /* ensure \0 termination */
 
     ifr.ifr_flags = IFF_TAP|IFF_NO_PI;
@@ -166,6 +176,27 @@ low_level_init(struct netif *netif)
     }
   }
 #endif /* LWIP_UNIX_LINUX */
+
+#ifdef LWIP_UNIX_FREEBSD
+  /* Set Netif information */
+  {
+    struct ifreq ifr;
+    if (ioctl(tapif->fd, SIOCGIFADDR, (void *) &netif->hwaddr) < 0) {
+      perror("tapif_init: "DEVTAP" ioctl SIOCGIFADDR");
+      exit(1);
+    }
+    LWIP_DEBUGF(TAPIF_DEBUG, ("tapif_init: "DEVTAP" mac addr: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
+          netif->hwaddr[0], netif->hwaddr[1], netif->hwaddr[2],
+          netif->hwaddr[3], netif->hwaddr[4], netif->hwaddr[5]));
+
+    /* get address */
+    if (ioctl(tapif->fd, SIOCGIFADDR, (void *) &ifr) < 0) {
+      perror("tapif_init: "DEVTAP" ioctl SIOCGIFADDR");
+      exit(1);
+    }
+
+  }
+#endif
 
   netif_set_link_up(netif);
 
